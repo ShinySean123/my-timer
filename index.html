@@ -131,8 +131,8 @@
     </div>
 </div>
 
-<!-- 隱藏的音訊播放器 -->
-<audio id="bell-player"></audio>
+<!-- 預設載入 bell.mp3，如果找不到才播放電子音 -->
+<audio id="bell-player" src="bell.mp3"></audio>
 
 <script>
     let timerInterval;
@@ -160,25 +160,40 @@
         }
     };
 
-    function playBell() {
-        // 如果使用者有上傳檔案，就播放檔案；否則播放預設電子音
-        if (bellPlayer.src) {
-            bellPlayer.play();
-        } else {
-            const context = new (window.AudioContext || window.webkitAudioContext)();
-            const osc = context.createOscillator();
-            const gain = context.createGain();
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(880, context.currentTime);
-            gain.gain.setValueAtTime(0.5, context.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, context.currentTime + 1);
-            osc.connect(gain);
-            gain.connect(context.destination);
-            osc.start();
-            osc.stop(context.currentTime + 1);
+function playBell() {
+    // 檢查是否有上傳新檔案，或是預設的 src 是否存在
+    if (bellPlayer.src && bellPlayer.src !== "") {
+        // 抓取播放器並重置到開頭再播放 (防止連續響鈴時沒反應)
+        bellPlayer.currentTime = 0;
+        const playPromise = bellPlayer.play();
+        
+        // 處理瀏覽器可能的自動播放阻擋
+        if (playPromise !== undefined) {
+            playPromise.catch(error => {
+                console.log("播放被阻擋，請確保曾點擊網頁任意處");
+                // 如果 MP3 載入失敗，播放電子音當備案
+                playBeepFallback();
+            });
         }
+    } else {
+        playBeepFallback();
     }
+}
 
+    // 把原本的電子音邏輯獨立出來
+    function playBeepFallback() {
+        const context = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = context.createOscillator();
+        const gain = context.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, context.currentTime);
+        gain.gain.setValueAtTime(0.5, context.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, context.currentTime + 1);
+        osc.connect(gain);
+        gain.connect(context.destination);
+        osc.start();
+        osc.stop(context.currentTime + 1);
+    }
     function formatTime(s, showHours = false) {
         const hrs = Math.floor(s / 3600);
         const mins = Math.floor((s % 3600) / 60);
