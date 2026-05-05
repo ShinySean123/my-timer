@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>循環定時提醒器 Pro</title>
+    <style>
+        :root {
+            --primary: #27ae60;
+            --danger: #e74c3c;
+            --dark: #2c3e50;
+            --gray: #95a5a6;
+            --bg: #f4f7f6;
+        }
+
+        body {
+            font-family: "微軟正黑體", sans-serif;
+            background-color: var(--bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 380px;
+        }
+
+        h2 { color: var(--dark); margin-bottom: 20px; }
+
+        .input-group {
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type="number"] {
+            width: 60px;
+            padding: 8px;
+            font-size: 1.2rem;
+            text-align: center;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+        }
+
+        /* 檔案選擇器樣式 */
+        .audio-upload {
+            margin-bottom: 20px;
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        #countdown-display {
+            font-size: 4rem;
+            font-weight: bold;
+            color: var(--dark);
+            margin: 10px 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .elapsed-box {
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+        }
+
+        #elapsed-display { font-weight: bold; color: #e67e22; }
+
+        .btn-group { display: flex; gap: 10px; flex-direction: column; }
+        .row { display: flex; gap: 10px; }
+
+        button {
+            flex: 1;
+            padding: 12px;
+            font-size: 1rem;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            transition: background 0.2s;
+            font-weight: bold;
+        }
+
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-start { background-color: var(--primary); color: white; }
+        .btn-stop { background-color: var(--danger); color: white; }
+        .btn-reset { background-color: var(--gray); color: white; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>循環定時器</h2>
+
+    <div class="input-group">
+        <input type="number" id="min-input" value="1" min="0"> 分
+        <input type="number" id="sec-input" value="0" min="0" max="59"> 秒
+    </div>
+
+    <div class="audio-upload">
+        自訂鈴聲：<input type="file" id="audio-file" accept="audio/*">
+    </div>
+
+    <hr style="border: 0; border-top: 1px solid #eee;">
+
+    <div style="color: #7f8c8d; font-size: 0.9rem; margin-top: 10px;">距離下次響鈴</div>
+    <div id="countdown-display">00:00</div>
+
+    <div class="elapsed-box">
+        <span>累計經過總時間：</span>
+        <span id="elapsed-display">00:00:00</span>
+    </div>
+
+    <div class="btn-group">
+        <div class="row">
+            <button class="btn-start" id="start-btn" onclick="startTimer()">開始計時</button>
+            <button class="btn-stop" id="stop-btn" onclick="stopTimer()" disabled>暫停</button>
+        </div>
+        <button class="btn-reset" onclick="resetElapsed()">重置累計時間</button>
+    </div>
+</div>
+
+<!-- 隱藏的音訊播放器 -->
+<audio id="bell-player"></audio>
+
+<script>
+    let timerInterval;
+    let totalSeconds = 0;
+    let remainingSeconds = 0;
+    let elapsedSeconds = 0;
+    let isRunning = false;
+    let isPaused = false; // 新增：用來記錄是否為暫停狀態
+
+    const countdownEl = document.getElementById('countdown-display');
+    const elapsedEl = document.getElementById('elapsed-display');
+    const startBtn = document.getElementById('start-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const minInput = document.getElementById('min-input');
+    const secInput = document.getElementById('sec-input');
+    const audioFileInput = document.getElementById('audio-file');
+    const bellPlayer = document.getElementById('bell-player');
+
+    // 處理音訊檔案上傳
+    audioFileInput.onchange = function() {
+        const file = this.files[0];
+        if (file) {
+            const url = URL.createObjectURL(file);
+            bellPlayer.src = url;
+        }
+    };
+
+    function playBell() {
+        // 如果使用者有上傳檔案，就播放檔案；否則播放預設電子音
+        if (bellPlayer.src) {
+            bellPlayer.play();
+        } else {
+            const context = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = context.createOscillator();
+            const gain = context.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, context.currentTime);
+            gain.gain.setValueAtTime(0.5, context.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, context.currentTime + 1);
+            osc.connect(gain);
+            gain.connect(context.destination);
+            osc.start();
+            osc.stop(context.currentTime + 1);
+        }
+    }
+
+    function formatTime(s, showHours = false) {
+        const hrs = Math.floor(s / 3600);
+        const mins = Math.floor((s % 3600) / 60);
+        const secs = s % 60;
+        if (showHours) return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+
+    function startTimer() {
+        const m = parseInt(minInput.value) || 0;
+        const s = parseInt(secInput.value) || 0;
+        const newTotal = m * 60 + s;
+
+        if (newTotal <= 0) {
+            alert("請設定大於 0 的時間！");
+            return;
+        }
+
+        // 邏輯核心：如果是從暫停恢復，且時間設定沒變，就不要重設 remainingSeconds
+        if (!isPaused || totalSeconds !== newTotal) {
+            totalSeconds = newTotal;
+            remainingSeconds = totalSeconds;
+        }
+
+        isRunning = true;
+        isPaused = false;
+        
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        minInput.disabled = true;
+        secInput.disabled = true;
+
+        // 立即顯示一次避免 1 秒延遲
+        countdownEl.innerText = formatTime(remainingSeconds);
+
+        timerInterval = setInterval(() => {
+            elapsedSeconds++;
+            elapsedEl.innerText = formatTime(elapsedSeconds, true);
+
+            if (remainingSeconds <= 0) {
+                playBell();
+                remainingSeconds = totalSeconds;
+                countdownEl.style.color = 'var(--danger)';
+                setTimeout(() => countdownEl.style.color = 'var(--dark)', 500);
+            } else {
+                remainingSeconds--;
+            }
+            countdownEl.innerText = formatTime(remainingSeconds);
+        }, 1000);
+    }
+
+    function stopTimer() {
+        clearInterval(timerInterval);
+        isRunning = false;
+        isPaused = true; // 標記為暫停狀態
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        minInput.disabled = false;
+        secInput.disabled = false;
+    }
+
+    function resetElapsed() {
+        elapsedSeconds = 0;
+        elapsedEl.innerText = "00:00:00";
+        // 重置時，也強制把暫停狀態清除，下一次按開始會從頭計時
+        isPaused = false; 
+        if (!isRunning) {
+            countdownEl.innerText = "00:00";
+            countdownEl.style.color = 'var(--dark)';
+        }
+    }
+</script>
+
+</body>
+</html>
