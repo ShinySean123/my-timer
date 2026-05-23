@@ -3,16 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Slide 讀書專用計時器</title>
+    <title>Slide 讀書專用計時器 Pro</title>
     <style>
         :root {
             --primary: #2980b9;
+            --success: #27ae60;
             --danger: #e74c3c;
             --dark: #2c3e50;
             --gray: #95a5a6;
             --bg: #ecf0f1;
             --info-bg: #dff9fb;
             --info-text: #130f40;
+            --overtime: #c0392b;
         }
 
         body {
@@ -23,6 +25,8 @@
             align-items: center;
             min-height: 100vh;
             margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
         }
 
         .container {
@@ -31,13 +35,14 @@
             border-radius: 15px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
             text-align: center;
-            width: 420px;
+            width: 100%;
+            max-width: 420px;
         }
 
-        h2 { color: var(--dark); margin-bottom: 20px; }
+        h2 { color: var(--dark); margin-bottom: 20px; font-size: 1.5rem; }
 
         .input-group {
-            margin-bottom: 15px;
+            margin-bottom: 12px;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -48,14 +53,13 @@
 
         input[type="number"] {
             width: 60px;
-            padding: 8px;
+            padding: 6px;
             font-size: 1.1rem;
             text-align: center;
             border: 2px solid #ddd;
             border-radius: 5px;
         }
 
-        /* 預測資訊區塊 */
         .prediction-box {
             background-color: var(--info-bg);
             color: var(--info-text);
@@ -67,18 +71,17 @@
             border-left: 5px solid var(--primary);
             text-align: left;
         }
-
         .prediction-box span { font-weight: bold; color: var(--primary); }
 
         #countdown-display {
             font-size: 4.5rem;
             font-weight: bold;
             color: var(--dark);
-            margin: 10px 0;
+            margin: 5px 0;
             font-family: Arial, sans-serif;
+            font-variant-numeric: tabular-nums;
         }
 
-        /* 進度條與經過時間 */
         .status-box {
             background: #f9f9f9;
             padding: 15px;
@@ -90,11 +93,7 @@
             font-size: 0.95rem;
         }
 
-        .status-row {
-            display: flex;
-            justify-content: space-between;
-        }
-
+        .status-row { display: flex; justify-content: space-between; align-items: center; }
         .highlight-text { font-weight: bold; color: #e67e22; }
         .progress-text { font-weight: bold; color: var(--primary); }
 
@@ -108,14 +107,16 @@
             cursor: pointer;
             border: none;
             border-radius: 5px;
-            transition: background 0.2s;
+            transition: all 0.2s;
             font-weight: bold;
         }
-
         button:disabled { opacity: 0.5; cursor: not-allowed; }
+        button:active:not(:disabled) { transform: scale(0.98); }
+
         .btn-start { background-color: var(--primary); color: white; }
-        .btn-stop { background-color: var(--danger); color: white; }
-        .btn-reset { background-color: var(--gray); color: white; }
+        .btn-stop { background-color: var(--gray); color: white; }
+        .btn-reset { background-color: #bdc3c7; color: #333; }
+        .btn-next { background-color: var(--success); color: white; padding: 15px; font-size: 1.1rem; }
         
         audio { display: none; }
     </style>
@@ -123,10 +124,10 @@
 <body>
 
 <div class="container">
-    <h2>📖 Slide 專注閱讀系統</h2>
+    <h2>📖 Slide 專注閱讀系統 Pro</h2>
 
     <div class="input-group">
-        單張耗時：
+        單張目標：
         <input type="number" id="min-input" value="1" min="0"> 分
         <input type="number" id="sec-input" value="0" min="0" max="59"> 秒
     </div>
@@ -135,18 +136,18 @@
         <input type="number" id="slide-input" value="20" min="1"> 張
     </div>
     
-    <div style="font-size: 0.8rem; color: #666; margin-bottom: 10px;">
+    <div style="font-size: 0.8rem; color: #666; margin-bottom: 5px;">
         自訂鈴聲：<input type="file" id="audio-file" accept="audio/*">
     </div>
 
     <div class="prediction-box">
         預計總耗時：<span id="est-total-time">0 小時 20 分鐘 0 秒</span><br>
-        預計結束於：<span id="est-end-time">計算中...</span>
+        動態結束於：<span id="est-end-time">計算中...</span>
     </div>
 
     <hr style="border: 0; border-top: 1px solid #ddd; margin: 15px 0;">
 
-    <div style="color: #7f8c8d; font-size: 0.9rem;">目前 Slide 剩餘時間</div>
+    <div style="color: #7f8c8d; font-size: 0.9rem;">本張 Slide 剩餘時間 (負數代表超時)</div>
     <div id="countdown-display">00:00</div>
 
     <div class="status-box">
@@ -155,12 +156,17 @@
             <span class="progress-text" id="slide-progress">0 / 20 張</span>
         </div>
         <div class="status-row">
-            <span>⏱️ 累計總時間：</span>
+            <span>⚡ 進度狀態：</span>
+            <span id="pace-status" style="font-weight: bold; color: var(--dark);">尚未開始</span>
+        </div>
+        <div class="status-row">
+            <span>⏱️ 累計總耗時：</span>
             <span class="highlight-text" id="elapsed-display">00:00:00</span>
         </div>
     </div>
 
     <div class="btn-group">
+        <button class="btn-next" id="next-btn" onclick="nextSlide()" disabled>✅ 讀完本張 (下一張)</button>
         <div class="row">
             <button class="btn-start" id="start-btn" onclick="startTimer()">開始閱讀</button>
             <button class="btn-stop" id="stop-btn" onclick="stopTimer()" disabled>暫停</button>
@@ -173,135 +179,132 @@
 
 <script>
     let timerInterval;
+    let etaInterval; 
     let secondsPerSlide = 0;
     let totalSlides = 0;
     let remainingSeconds = 0;
     let elapsedSeconds = 0;
-    let currentSlideCount = 0; // 已讀完的張數
+    let currentSlideCount = 0;
     let isRunning = false;
     let isPaused = false;
 
-    // DOM 元素綁定
+    // DOM 元素
     const minInput = document.getElementById('min-input');
     const secInput = document.getElementById('sec-input');
     const slideInput = document.getElementById('slide-input');
-    
     const estTotalTimeEl = document.getElementById('est-total-time');
     const estEndTimeEl = document.getElementById('est-end-time');
-    
     const countdownEl = document.getElementById('countdown-display');
     const elapsedEl = document.getElementById('elapsed-display');
     const slideProgressEl = document.getElementById('slide-progress');
+    const paceStatusEl = document.getElementById('pace-status');
     
     const startBtn = document.getElementById('start-btn');
     const stopBtn = document.getElementById('stop-btn');
+    const nextBtn = document.getElementById('next-btn');
     const audioFileInput = document.getElementById('audio-file');
     const bellPlayer = document.getElementById('bell-player');
 
-    // 綁定輸入框事件：只要數字改變，就即時重新計算結束時間
+    // 監聽輸入以更新預測
     [minInput, secInput, slideInput].forEach(input => {
-        input.addEventListener('input', calculateEstimation);
+        input.addEventListener('input', calculateInitialEstimation);
     });
 
-    // 處理自訂音訊
     audioFileInput.onchange = function() {
-        const file = this.files[0];
-        if (file) {
-            bellPlayer.src = URL.createObjectURL(file);
-        }
+        if (this.files[0]) bellPlayer.src = URL.createObjectURL(this.files[0]);
     };
 
     function playBell() {
-        if (bellPlayer.src && bellPlayer.src !== "" && !bellPlayer.src.endsWith(window.location.pathname)) {
+        if (bellPlayer.src && !bellPlayer.src.endsWith(window.location.pathname)) {
             bellPlayer.currentTime = 0;
-            let playPromise = bellPlayer.play();
-            if (playPromise !== undefined) {
-                playPromise.catch(() => playBeepFallback());
-            }
+            let p = bellPlayer.play();
+            if (p !== undefined) p.catch(() => playBeepFallback());
         } else {
             playBeepFallback();
         }
     }
 
     function playBeepFallback() {
-        const context = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = context.createOscillator();
-        const gain = context.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, context.currentTime);
-        gain.gain.setValueAtTime(0.5, context.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, context.currentTime + 1);
-        osc.connect(gain);
-        gain.connect(context.destination);
-        osc.start();
-        osc.stop(context.currentTime + 1);
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        gain.gain.setValueAtTime(0.5, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(); osc.stop(ctx.currentTime + 1);
     }
 
-    function formatTime(s, showHours = false) {
-        const hrs = Math.floor(s / 3600);
-        const mins = Math.floor((s % 3600) / 60);
-        const secs = s % 60;
-        if (showHours) return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-    }
-
-    // --- 核心功能：計算預計總耗時與結束時間 ---
-    function calculateEstimation() {
-        if (isRunning) return; // 正在計時中不更新預測
-
-        const m = parseInt(minInput.value) || 0;
-        const s = parseInt(secInput.value) || 0;
-        const slides = parseInt(slideInput.value) || 0;
-
-        const totalSecondsNeeded = (m * 60 + s) * slides;
+    function formatTime(s) {
+        const absS = Math.abs(s);
+        const hrs = Math.floor(absS / 3600);
+        const mins = Math.floor((absS % 3600) / 60);
+        const secs = absS % 60;
+        let timeStr = "";
         
-        if (totalSecondsNeeded <= 0) {
-            estTotalTimeEl.innerText = "0 小時 0 分鐘 0 秒";
-            estEndTimeEl.innerText = "請設定有效時間";
-            return;
+        if (hrs > 0) timeStr = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        else timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        
+        return s < 0 ? "-" + timeStr : timeStr;
+    }
+
+    function calculateInitialEstimation() {
+        if (isRunning || isPaused) return;
+        const totalSecs = ((parseInt(minInput.value)||0)*60 + (parseInt(secInput.value)||0)) * (parseInt(slideInput.value)||0);
+        
+        const h = Math.floor(totalSecs / 3600);
+        const min = Math.floor((totalSecs % 3600) / 60);
+        estTotalTimeEl.innerText = `${h} 小時 ${min} 分鐘 ${totalSecs%60} 秒`;
+        
+        const end = new Date(Date.now() + totalSecs * 1000);
+        estEndTimeEl.innerText = `${end.getFullYear()}年${(end.getMonth()+1).toString().padStart(2,'0')}月${end.getDate().toString().padStart(2,'0')}日 ${end.getHours().toString().padStart(2,'0')}:${end.getMinutes().toString().padStart(2,'0')}:${end.getSeconds().toString().padStart(2,'0')}`;
+    }
+
+    function updateDynamicETA() {
+        if (!isRunning && !isPaused) return;
+        
+        const slidesLeftToStart = Math.max(0, totalSlides - currentSlideCount - 1);
+        const currentSlideRemaining = Math.max(0, remainingSeconds);
+        const totalRemainingWork = currentSlideRemaining + (slidesLeftToStart * secondsPerSlide);
+        
+        const end = new Date(Date.now() + totalRemainingWork * 1000);
+        estEndTimeEl.innerText = `${end.getFullYear()}年${(end.getMonth()+1).toString().padStart(2,'0')}月${end.getDate().toString().padStart(2,'0')}日 ${end.getHours().toString().padStart(2,'0')}:${end.getMinutes().toString().padStart(2,'0')}:${end.getSeconds().toString().padStart(2,'0')}`;
+    }
+
+    function updatePaceStatus() {
+        if (secondsPerSlide <= 0) return;
+        const expectedSlidesFinished = Math.floor(elapsedSeconds / secondsPerSlide);
+        const diff = currentSlideCount - expectedSlidesFinished;
+
+        if (diff > 0) {
+            paceStatusEl.innerText = `🔥 超前 ${diff} 張`;
+            paceStatusEl.style.color = 'var(--success)';
+        } else if (diff < 0) {
+            paceStatusEl.innerText = `⚠️ 落後 ${Math.abs(diff)} 張`;
+            paceStatusEl.style.color = 'var(--danger)';
+        } else {
+            paceStatusEl.innerText = `✅ 符合預期`;
+            paceStatusEl.style.color = 'var(--dark)';
         }
-
-        // 格式化預計總耗時
-        const h = Math.floor(totalSecondsNeeded / 3600);
-        const min = Math.floor((totalSecondsNeeded % 3600) / 60);
-        const sec = totalSecondsNeeded % 60;
-        estTotalTimeEl.innerText = `${h} 小時 ${min} 分鐘 ${sec} 秒`;
-
-        // 格式化預計結束時間 (YYYY-MM-DD HH:MM:SS)
-        const now = new Date();
-        const endTime = new Date(now.getTime() + totalSecondsNeeded * 1000);
-        
-        const yyyy = endTime.getFullYear();
-        const mm = String(endTime.getMonth() + 1).padStart(2, '0');
-        const dd = String(endTime.getDate()).padStart(2, '0');
-        const hh = String(endTime.getHours()).padStart(2, '0');
-        const minOut = String(endTime.getMinutes()).padStart(2, '0');
-        const ss = String(endTime.getSeconds()).padStart(2, '0');
-
-        estEndTimeEl.innerText = `${yyyy}年${mm}月${dd}日 ${hh}:${minOut}:${ss}`;
     }
 
     function startTimer() {
         const m = parseInt(minInput.value) || 0;
         const s = parseInt(secInput.value) || 0;
         totalSlides = parseInt(slideInput.value) || 0;
-        const newSecondsPerSlide = m * 60 + s;
+        const newSecs = m * 60 + s;
 
-        if (newSecondsPerSlide <= 0 || totalSlides <= 0) {
-            alert("請設定正確的時間與投影片張數！");
-            return;
-        }
+        if (newSecs <= 0 || totalSlides <= 0) return alert("請設定有效時間與張數！");
 
-        // 如果是全新開始，或是修改了設定，就套用新設定
-        if (!isPaused || secondsPerSlide !== newSecondsPerSlide) {
-            secondsPerSlide = newSecondsPerSlide;
+        if (!isPaused || secondsPerSlide !== newSecs) {
+            secondsPerSlide = newSecs;
             remainingSeconds = secondsPerSlide;
-            currentSlideCount = 0; // 進度歸零
+            currentSlideCount = 0;
             slideProgressEl.innerText = `0 / ${totalSlides} 張`;
-            calculateEstimation(); // 開始的瞬間鎖定預測時間
+            paceStatusEl.innerText = "剛開始閱讀";
+            paceStatusEl.style.color = "var(--dark)";
         }
 
-        // 檢查是否已經讀完所有 Slide，如果讀完就重置進度
         if (currentSlideCount >= totalSlides) {
             currentSlideCount = 0;
             remainingSeconds = secondsPerSlide;
@@ -312,84 +315,98 @@
         
         startBtn.disabled = true;
         stopBtn.disabled = false;
+        nextBtn.disabled = false;
         minInput.disabled = true;
         secInput.disabled = true;
         slideInput.disabled = true;
 
-        countdownEl.innerText = formatTime(remainingSeconds);
-
         timerInterval = setInterval(() => {
             elapsedSeconds++;
-            elapsedEl.innerText = formatTime(elapsedSeconds, true);
+            elapsedEl.innerText = formatTime(elapsedSeconds);
+            remainingSeconds--;
 
-            if (remainingSeconds <= 0) {
+            // --- 核心邏輯修改：超時循環響鈴 ---
+            // 情況 A：剛好歸零的第一秒，響鈴！
+            if (remainingSeconds === 0) {
                 playBell();
-                currentSlideCount++;
-                slideProgressEl.innerText = `${currentSlideCount} / ${totalSlides} 張`;
-
-                if (currentSlideCount >= totalSlides) {
-                    // 所有 Slide 讀完了！
-                    clearInterval(timerInterval);
-                    countdownEl.innerText = "完成!";
-                    countdownEl.style.color = "var(--primary)";
-                    isRunning = false;
-                    isPaused = false;
-                    startBtn.disabled = false;
-                    stopBtn.disabled = true;
-                    minInput.disabled = false;
-                    secInput.disabled = false;
-                    slideInput.disabled = false;
-                    setTimeout(() => alert("恭喜！你已經讀完所有設定的投影片！"), 500);
-                    return;
-                } else {
-                    // 進入下一張 Slide
-                    remainingSeconds = secondsPerSlide;
-                    countdownEl.style.color = 'var(--danger)';
-                    setTimeout(() => countdownEl.style.color = 'var(--dark)', 500);
+                countdownEl.style.color = 'var(--overtime)';
+            }
+            
+            // 情況 B：時間已經是負數（超時），且「超時的秒數」剛好是設定時間的整數倍
+            // Math.abs(remainingSeconds) % secondsPerSlide === 0 代表又過了一輪的時間
+            if (remainingSeconds < 0) {
+                countdownEl.style.color = 'var(--overtime)';
+                if (Math.abs(remainingSeconds) % secondsPerSlide === 0) {
+                    playBell(); // 再次響鈴催促！
                 }
             } else {
-                remainingSeconds--;
+                if (remainingSeconds > 0) countdownEl.style.color = 'var(--dark)';
             }
+
             countdownEl.innerText = formatTime(remainingSeconds);
+            updatePaceStatus();
         }, 1000);
+
+        updateDynamicETA();
+        etaInterval = setInterval(updateDynamicETA, 1000);
+    }
+
+    function nextSlide() {
+        currentSlideCount++;
+        slideProgressEl.innerText = `${currentSlideCount} / ${totalSlides} 張`;
+        
+        if (currentSlideCount >= totalSlides) {
+            clearInterval(timerInterval);
+            clearInterval(etaInterval);
+            countdownEl.innerText = "完成!";
+            countdownEl.style.color = "var(--success)";
+            paceStatusEl.innerText = `🎉 恭喜！總耗時 ${formatTime(elapsedSeconds)}`;
+            paceStatusEl.style.color = "var(--success)";
+            
+            isRunning = false; isPaused = false;
+            startBtn.innerText = "重新開始";
+            startBtn.disabled = false; stopBtn.disabled = true; nextBtn.disabled = true;
+            minInput.disabled = false; secInput.disabled = false; slideInput.disabled = false;
+            playBell();
+        } else {
+            remainingSeconds = secondsPerSlide;
+            countdownEl.innerText = formatTime(remainingSeconds);
+            countdownEl.style.color = 'var(--dark)';
+            updatePaceStatus();
+            updateDynamicETA();
+        }
     }
 
     function stopTimer() {
         clearInterval(timerInterval);
-        isRunning = false;
-        isPaused = true;
+        clearInterval(etaInterval);
+        isRunning = false; isPaused = true;
         startBtn.innerText = "繼續閱讀";
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
-        minInput.disabled = false;
-        secInput.disabled = false;
-        slideInput.disabled = false;
+        startBtn.disabled = false; stopBtn.disabled = true; nextBtn.disabled = true;
+        minInput.disabled = false; secInput.disabled = false; slideInput.disabled = false;
     }
 
     function resetSystem() {
         clearInterval(timerInterval);
-        elapsedSeconds = 0;
-        currentSlideCount = 0;
-        isRunning = false;
-        isPaused = false;
+        clearInterval(etaInterval);
+        elapsedSeconds = 0; currentSlideCount = 0;
+        isRunning = false; isPaused = false;
         
         elapsedEl.innerText = "00:00:00";
         countdownEl.innerText = "00:00";
         countdownEl.style.color = "var(--dark)";
+        paceStatusEl.innerText = "尚未開始";
+        paceStatusEl.style.color = "var(--dark)";
         startBtn.innerText = "開始閱讀";
         
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
-        minInput.disabled = false;
-        secInput.disabled = false;
-        slideInput.disabled = false;
+        startBtn.disabled = false; stopBtn.disabled = true; nextBtn.disabled = true;
+        minInput.disabled = false; secInput.disabled = false; slideInput.disabled = false;
         
         slideProgressEl.innerText = `0 / ${slideInput.value || 0} 張`;
-        calculateEstimation(); // 重置時重新試算時間
+        calculateInitialEstimation();
     }
 
-    // 網頁載入時先執行一次時間預估
-    calculateEstimation();
+    calculateInitialEstimation();
 </script>
 
 </body>
