@@ -14,7 +14,6 @@
             --bg: #ecf0f1;
             --info-bg: #dff9fb;
             --info-text: #130f40;
-            --overtime: #c0392b;
         }
 
         body {
@@ -36,7 +35,7 @@
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
             text-align: center;
             width: 100%;
-            max-width: 440px; /* 稍微加寬以容納完整的年月日時間 */
+            max-width: 440px; /* 加寬以完美容納完整年月日時間 */
         }
 
         h2 { color: var(--dark); margin-bottom: 20px; font-size: 1.5rem; }
@@ -80,7 +79,7 @@
             margin: 5px 0;
             font-family: Arial, sans-serif;
             font-variant-numeric: tabular-nums;
-            transition: transform 0.1s ease-in-out;
+            transition: color 0.2s;
         }
 
         .status-box {
@@ -148,7 +147,7 @@
 
     <hr style="border: 0; border-top: 1px solid #ddd; margin: 15px 0;">
 
-    <div style="color: #7f8c8d; font-size: 0.9rem;">本張 Slide 剩餘時間 (負數代表超時)</div>
+    <div style="color: #7f8c8d; font-size: 0.9rem;">本張時間配額</div>
     <div id="countdown-display">00:00</div>
 
     <div class="status-box">
@@ -236,32 +235,34 @@
         osc.start(); osc.stop(ctx.currentTime + 1);
     }
 
+    // 專門格式化倒數(分:秒)
     function formatTime(s) {
-        const absS = Math.abs(s);
-        const hrs = Math.floor(absS / 3600);
-        const mins = Math.floor((absS % 3600) / 60);
-        const secs = absS % 60;
-        let timeStr = "";
-        
-        if (hrs > 0) timeStr = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-        else timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-        
-        return s < 0 ? "-" + timeStr : timeStr;
+        const mins = Math.floor(s / 60);
+        const secs = s % 60;
+        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     }
 
-    // 新增：專門用來把 Date 物件格式化為「幾年幾月幾日幾點幾分幾秒 (24小時制)」的函數
+    // 專門格式化總耗時(時:分:秒)
+    function formatElapsed(s) {
+        const hrs = Math.floor(s / 3600);
+        const mins = Math.floor((s % 3600) / 60);
+        const secs = s % 60;
+        return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+
+    // 格式化為「幾年幾月幾日幾點幾分幾秒 (24小時制)」
     function formatFullDateTime(dateObj) {
         const yyyy = dateObj.getFullYear();
         const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
         const dd = String(dateObj.getDate()).padStart(2, '0');
-        const hh = String(dateObj.getHours()).padStart(2, '0'); // 24小時制
+        const hh = String(dateObj.getHours()).padStart(2, '0'); 
         const min = String(dateObj.getMinutes()).padStart(2, '0');
         const ss = String(dateObj.getSeconds()).padStart(2, '0');
         
         return `${yyyy}年${mm}月${dd}日 ${hh}:${min}:${ss}`;
     }
 
-    // 初始試算結束時間
+    // 初始試算
     function calculateInitialEstimation() {
         if (isRunning || isPaused) return;
         const totalSecs = ((parseInt(minInput.value)||0)*60 + (parseInt(secInput.value)||0)) * (parseInt(slideInput.value)||0);
@@ -271,23 +272,27 @@
         estTotalTimeEl.innerText = `${h} 小時 ${min} 分鐘 ${totalSecs%60} 秒`;
         
         const end = new Date(Date.now() + totalSecs * 1000);
-        estEndTimeEl.innerText = formatFullDateTime(end); // 套用完整格式
+        estEndTimeEl.innerText = formatFullDateTime(end);
     }
 
-    // 動態更新預估結束時間 (考慮超時與剩餘張數)
+    // 動態更新預估結束時間 (完美配合不中斷倒數邏輯)
     function updateDynamicETA() {
         if (!isRunning && !isPaused) return;
         
-        const slidesLeftToStart = Math.max(0, totalSlides - currentSlideCount - 1);
-        const currentSlideRemaining = Math.max(0, remainingSeconds);
-        const totalRemainingWork = currentSlideRemaining + (slidesLeftToStart * secondsPerSlide);
+        // 還剩下幾張投影片要讀 (不含現在這張)
+        const slidesLeft = Math.max(0, totalSlides - currentSlideCount - 1);
+        
+        // 剩餘總秒數 = 當前倒數剩餘秒數 + (剩餘張數 * 每張預期秒數)
+        const totalRemainingWork = remainingSeconds + (slidesLeft * secondsPerSlide);
         
         const end = new Date(Date.now() + totalRemainingWork * 1000);
-        estEndTimeEl.innerText = formatFullDateTime(end); // 套用完整格式
+        estEndTimeEl.innerText = formatFullDateTime(end);
     }
 
+    // 分析進度狀態 (超前 vs 落後)
     function updatePaceStatus() {
         if (secondsPerSlide <= 0) return;
+        // 依照目前流逝的總時間，理想上應該要讀完幾張
         const expectedSlidesFinished = Math.floor(elapsedSeconds / secondsPerSlide);
         const diff = currentSlideCount - expectedSlidesFinished;
 
@@ -320,11 +325,6 @@
             paceStatusEl.style.color = "var(--dark)";
         }
 
-        if (currentSlideCount >= totalSlides) {
-            currentSlideCount = 0;
-            remainingSeconds = secondsPerSlide;
-        }
-
         isRunning = true;
         isPaused = false;
         
@@ -335,41 +335,46 @@
         secInput.disabled = true;
         slideInput.disabled = true;
 
+        countdownEl.innerText = formatTime(remainingSeconds);
+
+        // 主計時器：純粹的反覆循環倒數
         timerInterval = setInterval(() => {
             elapsedSeconds++;
-            elapsedEl.innerText = formatTime(elapsedSeconds);
+            elapsedEl.innerText = formatElapsed(elapsedSeconds);
+            
+            // 完美無縫反覆倒數邏輯
+            if (remainingSeconds === 0) {
+                remainingSeconds = secondsPerSlide;
+            }
             remainingSeconds--;
 
-            if (remainingSeconds <= 0 && Math.abs(remainingSeconds) % secondsPerSlide === 0) {
-                playBell();
-                countdownEl.style.transform = 'scale(1.1)';
-                setTimeout(() => countdownEl.style.transform = 'scale(1)', 200);
-            }
-            
-            if (remainingSeconds < 0) {
-                countdownEl.style.color = 'var(--overtime)';
-            } else {
-                countdownEl.style.color = 'var(--dark)';
+            if (remainingSeconds === 0) {
+                playBell(); // 剛好歸零時響鈴
+                countdownEl.style.color = 'var(--danger)';
+                setTimeout(() => countdownEl.style.color = 'var(--dark)', 500);
             }
 
             countdownEl.innerText = formatTime(remainingSeconds);
             updatePaceStatus();
         }, 1000);
 
+        // 每秒同步更新動態結束時間 (即使暫停，時間也會自動往後延)
         updateDynamicETA();
         etaInterval = setInterval(updateDynamicETA, 1000);
     }
 
+    // 核心更改：讀完按鈕完全不干擾倒數，只記錄進度
     function nextSlide() {
         currentSlideCount++;
         slideProgressEl.innerText = `${currentSlideCount} / ${totalSlides} 張`;
         
         if (currentSlideCount >= totalSlides) {
+            // 全部讀完！
             clearInterval(timerInterval);
             clearInterval(etaInterval);
             countdownEl.innerText = "完成!";
             countdownEl.style.color = "var(--success)";
-            paceStatusEl.innerText = `🎉 恭喜！總耗時 ${formatTime(elapsedSeconds)}`;
+            paceStatusEl.innerText = `🎉 恭喜！總耗時 ${formatElapsed(elapsedSeconds)}`;
             paceStatusEl.style.color = "var(--success)";
             
             isRunning = false; isPaused = false;
@@ -378,9 +383,7 @@
             minInput.disabled = false; secInput.disabled = false; slideInput.disabled = false;
             playBell();
         } else {
-            remainingSeconds = secondsPerSlide;
-            countdownEl.innerText = formatTime(remainingSeconds);
-            countdownEl.style.color = 'var(--dark)';
+            // 讀完一張，倒數計時不重置，只刷新狀態與預估時間
             updatePaceStatus();
             updateDynamicETA();
         }
@@ -388,6 +391,7 @@
 
     function stopTimer() {
         clearInterval(timerInterval);
+        clearInterval(etaInterval);
         isRunning = false; isPaused = true;
         startBtn.innerText = "繼續閱讀";
         startBtn.disabled = false; stopBtn.disabled = true; nextBtn.disabled = true;
