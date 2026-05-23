@@ -80,6 +80,7 @@
             margin: 5px 0;
             font-family: Arial, sans-serif;
             font-variant-numeric: tabular-nums;
+            transition: transform 0.1s ease-in-out; /* 加入微震動的過渡效果 */
         }
 
         .status-box {
@@ -257,18 +258,17 @@
         estTotalTimeEl.innerText = `${h} 小時 ${min} 分鐘 ${totalSecs%60} 秒`;
         
         const end = new Date(Date.now() + totalSecs * 1000);
-        estEndTimeEl.innerText = `${end.getFullYear()}年${(end.getMonth()+1).toString().padStart(2,'0')}月${end.getDate().toString().padStart(2,'0')}日 ${end.getHours().toString().padStart(2,'0')}:${end.getMinutes().toString().padStart(2,'0')}:${end.getSeconds().toString().padStart(2,'0')}`;
+        estEndTimeEl.innerText = `${end.getHours().toString().padStart(2,'0')}:${end.getMinutes().toString().padStart(2,'0')}`;
     }
 
     function updateDynamicETA() {
         if (!isRunning && !isPaused) return;
-        
         const slidesLeftToStart = Math.max(0, totalSlides - currentSlideCount - 1);
         const currentSlideRemaining = Math.max(0, remainingSeconds);
         const totalRemainingWork = currentSlideRemaining + (slidesLeftToStart * secondsPerSlide);
         
         const end = new Date(Date.now() + totalRemainingWork * 1000);
-        estEndTimeEl.innerText = `${end.getFullYear()}年${(end.getMonth()+1).toString().padStart(2,'0')}月${end.getDate().toString().padStart(2,'0')}日 ${end.getHours().toString().padStart(2,'0')}:${end.getMinutes().toString().padStart(2,'0')}:${end.getSeconds().toString().padStart(2,'0')}`;
+        estEndTimeEl.innerText = `${end.getHours().toString().padStart(2,'0')}:${end.getMinutes().toString().padStart(2,'0')}`;
     }
 
     function updatePaceStatus() {
@@ -325,22 +325,19 @@
             elapsedEl.innerText = formatTime(elapsedSeconds);
             remainingSeconds--;
 
-            // --- 核心邏輯修改：超時循環響鈴 ---
-            // 情況 A：剛好歸零的第一秒，響鈴！
-            if (remainingSeconds === 0) {
+            // 核心變更：剛好歸零，或是「超時且達到間隔時間的倍數」時，發出聲音提醒
+            if (remainingSeconds <= 0 && Math.abs(remainingSeconds) % secondsPerSlide === 0) {
                 playBell();
-                countdownEl.style.color = 'var(--overtime)';
+                // 加上一點視覺震動回饋，讓使用者更有感
+                countdownEl.style.transform = 'scale(1.1)';
+                setTimeout(() => countdownEl.style.transform = 'scale(1)', 200);
             }
             
-            // 情況 B：時間已經是負數（超時），且「超時的秒數」剛好是設定時間的整數倍
-            // Math.abs(remainingSeconds) % secondsPerSlide === 0 代表又過了一輪的時間
+            // 如果是負數(超時)，顯示紅色
             if (remainingSeconds < 0) {
                 countdownEl.style.color = 'var(--overtime)';
-                if (Math.abs(remainingSeconds) % secondsPerSlide === 0) {
-                    playBell(); // 再次響鈴催促！
-                }
             } else {
-                if (remainingSeconds > 0) countdownEl.style.color = 'var(--dark)';
+                countdownEl.style.color = 'var(--dark)';
             }
 
             countdownEl.innerText = formatTime(remainingSeconds);
@@ -379,7 +376,6 @@
 
     function stopTimer() {
         clearInterval(timerInterval);
-        clearInterval(etaInterval);
         isRunning = false; isPaused = true;
         startBtn.innerText = "繼續閱讀";
         startBtn.disabled = false; stopBtn.disabled = true; nextBtn.disabled = true;
