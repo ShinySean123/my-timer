@@ -36,7 +36,7 @@
             box-shadow: 0 10px 25px rgba(0,0,0,0.1);
             text-align: center;
             width: 100%;
-            max-width: 420px;
+            max-width: 440px; /* 稍微加寬以容納完整的年月日時間 */
         }
 
         h2 { color: var(--dark); margin-bottom: 20px; font-size: 1.5rem; }
@@ -80,7 +80,7 @@
             margin: 5px 0;
             font-family: Arial, sans-serif;
             font-variant-numeric: tabular-nums;
-            transition: transform 0.1s ease-in-out; /* 加入微震動的過渡效果 */
+            transition: transform 0.1s ease-in-out;
         }
 
         .status-box {
@@ -249,6 +249,19 @@
         return s < 0 ? "-" + timeStr : timeStr;
     }
 
+    // 新增：專門用來把 Date 物件格式化為「幾年幾月幾日幾點幾分幾秒 (24小時制)」的函數
+    function formatFullDateTime(dateObj) {
+        const yyyy = dateObj.getFullYear();
+        const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const dd = String(dateObj.getDate()).padStart(2, '0');
+        const hh = String(dateObj.getHours()).padStart(2, '0'); // 24小時制
+        const min = String(dateObj.getMinutes()).padStart(2, '0');
+        const ss = String(dateObj.getSeconds()).padStart(2, '0');
+        
+        return `${yyyy}年${mm}月${dd}日 ${hh}:${min}:${ss}`;
+    }
+
+    // 初始試算結束時間
     function calculateInitialEstimation() {
         if (isRunning || isPaused) return;
         const totalSecs = ((parseInt(minInput.value)||0)*60 + (parseInt(secInput.value)||0)) * (parseInt(slideInput.value)||0);
@@ -258,17 +271,19 @@
         estTotalTimeEl.innerText = `${h} 小時 ${min} 分鐘 ${totalSecs%60} 秒`;
         
         const end = new Date(Date.now() + totalSecs * 1000);
-        estEndTimeEl.innerText = `${end.getHours().toString().padStart(2,'0')}:${end.getMinutes().toString().padStart(2,'0')}`;
+        estEndTimeEl.innerText = formatFullDateTime(end); // 套用完整格式
     }
 
+    // 動態更新預估結束時間 (考慮超時與剩餘張數)
     function updateDynamicETA() {
         if (!isRunning && !isPaused) return;
+        
         const slidesLeftToStart = Math.max(0, totalSlides - currentSlideCount - 1);
         const currentSlideRemaining = Math.max(0, remainingSeconds);
         const totalRemainingWork = currentSlideRemaining + (slidesLeftToStart * secondsPerSlide);
         
         const end = new Date(Date.now() + totalRemainingWork * 1000);
-        estEndTimeEl.innerText = `${end.getHours().toString().padStart(2,'0')}:${end.getMinutes().toString().padStart(2,'0')}`;
+        estEndTimeEl.innerText = formatFullDateTime(end); // 套用完整格式
     }
 
     function updatePaceStatus() {
@@ -325,15 +340,12 @@
             elapsedEl.innerText = formatTime(elapsedSeconds);
             remainingSeconds--;
 
-            // 核心變更：剛好歸零，或是「超時且達到間隔時間的倍數」時，發出聲音提醒
             if (remainingSeconds <= 0 && Math.abs(remainingSeconds) % secondsPerSlide === 0) {
                 playBell();
-                // 加上一點視覺震動回饋，讓使用者更有感
                 countdownEl.style.transform = 'scale(1.1)';
                 setTimeout(() => countdownEl.style.transform = 'scale(1)', 200);
             }
             
-            // 如果是負數(超時)，顯示紅色
             if (remainingSeconds < 0) {
                 countdownEl.style.color = 'var(--overtime)';
             } else {
